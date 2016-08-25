@@ -1,0 +1,129 @@
+#include <pcl/io/pcd_io.h>
+#include <pcl/features/gfpfh.h>
+#include <iostream>
+#include <fstream>
+ 
+using namespace std;
+ 
+int
+main(int argc, char** argv)
+{
+	// Cloud for storing the object.
+	pcl::PointCloud<pcl::PointXYZL>::Ptr object(new pcl::PointCloud<pcl::PointXYZL>);
+	// Object for storing the GFPFH descriptor.
+	//pcl::PointCloud<pcl::GFPFHSignature16>::Ptr descriptor(new pcl::PointCloud<pcl::GFPFHSignature16>);
+	
+	DIR *dir;
+	struct dirent *ent;
+	
+	cout << "Generating histograms..." << endl;
+	if(atoi(argv[2])){
+		ofstream myfile;
+		myfile.open("outputDescriptors.csv");
+		std::string nameFile;
+		std::string delimeter = ".";
+		std::string numFile;
+		
+		if ((dir = opendir (argv[1])) != NULL) {
+		  /* print all the files and directories within directory */
+		  while ((ent = readdir (dir)) != NULL) {
+		  	if(strcmp(ent->d_name,"..") != 0 && strcmp(ent->d_name,".") != 0 && strcmp(ent->d_name,"outputDescriptors.csv") && strcmp(ent->d_name,"outputDescriptors.pcd") != 0){
+		  		nameFile = std::string(ent->d_name);
+		  		numFile = nameFile.substr(0,nameFile.find(delimeter));
+		  		myfile << numFile << ",";
+				std::string pathFile = std::string(argv[1])+"/"+ent->d_name;
+				if (pcl::io::loadPCDFile<pcl::PointXYZL>(pathFile.c_str(), *object) != 0)
+				{
+					return -1;
+				}
+				pcl::PointCloud<pcl::GFPFHSignature16>::Ptr localDescriptor(new pcl::PointCloud<pcl::GFPFHSignature16>);
+				
+				for (size_t i = 0; i < object->points.size(); ++i)
+				{
+					object->points[i].label = 1 + i % 2;
+				}
+				
+				pcl::GFPFHEstimation<pcl::PointXYZL, pcl::PointXYZL, pcl::GFPFHSignature16> gfpfh;
+				gfpfh.setInputCloud(object);
+				// Set the object that contains the labels for each point. Thanks to the
+				// PointXYZL type, we can use the same object we store the cloud in.
+				gfpfh.setInputLabels(object);
+				// Set the size of the octree leaves to 1cm (cubic).
+				gfpfh.setOctreeLeafSize(0.01);
+				// Set the number of classes the cloud has been labelled with (default is 16).
+				gfpfh.setNumberOfClasses(2);
+			 
+				gfpfh.compute(*localDescriptor);
+				for(unsigned i = 0; i < localDescriptor->size(); i++){
+					for(unsigned j = 0; j < (sizeof(localDescriptor->points[i].histogram)/sizeof(*localDescriptor->points[i].histogram)); j++){
+						myfile << localDescriptor->points[i].histogram[j] << ",";
+					}
+				}
+		
+				//Even file name -> class 1
+				//Odd file name  -> class 0
+				if(atoi(numFile.c_str())%2 == 0){
+					myfile << "1\n";
+				}else{
+					myfile << "0\n";
+				}
+			}
+		  }	  
+		  
+		  myfile.close();
+		  closedir (dir);	 
+		  
+		  cout << "Generation finished" << endl; 
+  		  cout << "Output in file: ./outputDescriptors.csv" << endl;	
+		} else {
+		  /* could not open directory */
+		  perror ("");
+		  return EXIT_FAILURE;
+		}
+	}else{
+		pcl::PointCloud<pcl::GFPFHSignature16>::Ptr globalDescriptor(new pcl::PointCloud<pcl::GFPFHSignature16>);
+		if ((dir = opendir (argv[1])) != NULL) {
+		  /* print all the files and directories within directory */
+		  while ((ent = readdir (dir)) != NULL) {
+		  	if(strcmp(ent->d_name,"..") != 0 && strcmp(ent->d_name,".") != 0 && strcmp(ent->d_name,"outputDescriptors.csv") && strcmp(ent->d_name,"outputDescriptors.pcd") != 0){
+				std::string pathFile = std::string(argv[1])+"/"+ent->d_name;
+				if (pcl::io::loadPCDFile<pcl::PointXYZL>(pathFile.c_str(), *object) != 0)
+				{
+					return -1;
+				}
+
+				pcl::PointCloud<pcl::GFPFHSignature16>::Ptr localDescriptor(new pcl::PointCloud<pcl::GFPFHSignature16>);
+				
+				for (size_t i = 0; i < object->points.size(); ++i)
+				{
+					object->points[i].label = 1 + i % 2;
+				}
+	
+				pcl::GFPFHEstimation<pcl::PointXYZL, pcl::PointXYZL, pcl::GFPFHSignature16> gfpfh;
+				gfpfh.setInputCloud(object);
+				// Set the object that contains the labels for each point. Thanks to the
+				// PointXYZL type, we can use the same object we store the cloud in.
+				gfpfh.setInputLabels(object);
+				// Set the size of the octree leaves to 1cm (cubic).
+				gfpfh.setOctreeLeafSize(0.01);
+				// Set the number of classes the cloud has been labelled with (default is 16).
+				gfpfh.setNumberOfClasses(4);
+			 
+				gfpfh.compute(*localDescriptor);
+			}
+		  }	  
+		  
+		  closedir (dir);	 
+		  
+		  pcl::io::savePCDFile("outputDescriptors.pcd", *globalDescriptor);
+		  
+		  cout << "Generation finished" << endl; 
+	      cout << "Output in file: ./outputDescriptors.pcd" << endl;	
+		}		
+	}
+	
+	
+	
+	
+	
+}
